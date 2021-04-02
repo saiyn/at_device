@@ -57,7 +57,7 @@ static void esp8266_get_netdev_info(struct rt_work *work, void *work_data)
     ip_addr_t ip_addr;
     rt_uint32_t mac_addr[6] = {0};
     rt_uint32_t num = 0;
-    rt_uint8_t dhcp_stat = 0;
+    rt_uint32_t dhcp_stat = 0;
     struct rt_delayed_work *delay_work = (struct rt_delayed_work *)work;
     struct at_device *device = (struct at_device *)work_data;
     struct netdev *netdev = device->netdev;
@@ -561,6 +561,12 @@ static struct netdev *esp8266_netdev_add(const char *netdev_name)
     struct netdev *netdev = RT_NULL;
 
     RT_ASSERT(netdev_name);
+
+    netdev = netdev_get_by_name(netdev_name);
+    if (netdev != RT_NULL)
+    {
+        return (netdev);
+    }
 
     netdev = (struct netdev *) rt_calloc(1, sizeof(struct netdev));
     if (netdev == RT_NULL)

@@ -84,22 +84,14 @@ static int sim800c_socket_close(struct at_socket *socket)
 {
     uint32_t event = 0;
     int result = RT_EOK;
-    at_response_t resp = RT_NULL;
     int device_socket = (int) socket->user_data;
     struct at_device *device = (struct at_device *) socket->device;
-
-    resp = at_create_resp(64, 0, rt_tick_from_millisecond(300));
-    if (resp == RT_NULL)
-    {
-        LOG_E("no memory for resp create.");
-        return -RT_ENOMEM;
-    }
-
+    
     /* clear socket close event */
     event = SET_EVENT(device_socket, SIM800C_EVNET_CLOSE_OK);
     sim800c_socket_event_recv(device, event, 0, RT_EVENT_FLAG_OR);
-
-    if (at_obj_exec_cmd(device->client, resp, "AT+CIPCLOSE=%d", device_socket) < 0)
+    
+    if (at_obj_exec_cmd(device->client, NULL, "AT+CIPCLOSE=%d", device_socket) < 0)
     {
         result = -RT_ERROR;
         goto __exit;
@@ -112,12 +104,7 @@ static int sim800c_socket_close(struct at_socket *socket)
         goto __exit;
     }
 
-__exit:
-    if (resp)
-    {
-        at_delete_resp(resp);
-    }
-
+__exit:    
     return result;
 }
 
@@ -629,6 +616,9 @@ static const struct at_socket_ops sim800c_socket_ops =
     sim800c_socket_send,
     sim800c_domain_resolve,
     sim800c_socket_set_event_cb,
+#if defined(AT_SW_VERSION_NUM) && AT_SW_VERSION_NUM > 0x10300
+    RT_NULL,
+#endif
 };
 
 int sim800c_socket_init(struct at_device *device)

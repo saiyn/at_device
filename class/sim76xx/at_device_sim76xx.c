@@ -436,6 +436,12 @@ static struct netdev *sim76xx_netdev_add(const char *netdev_name)
 
     RT_ASSERT(netdev_name);
 
+    netdev = netdev_get_by_name(netdev_name);
+    if (netdev != RT_NULL)
+    {
+        return (netdev);
+    }
+
     netdev = (struct netdev *)rt_calloc(1, sizeof(struct netdev));
     if (netdev == RT_NULL)
     {
@@ -529,7 +535,7 @@ static void sim76xx_init_thread_entry(void *parameter)
             at_obj_exec_cmd(client, resp, "AT+CPIN?");
             if (at_resp_get_line_by_kw(resp, "READY"))
             {
-                LOG_D("%s device SIM card detection failed.", device->name);
+                LOG_D("%s device SIM card detection success.", device->name);
                 break;
             }
             LOG_I("\"AT+CPIN\" commands send retry...");

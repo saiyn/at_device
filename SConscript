@@ -4,6 +4,15 @@ cwd = GetCurrentDir()
 path = [cwd + '/inc']
 src  = Glob('src/*.c')
 
+# A9G
+if GetDepend(['AT_DEVICE_USING_A9G']):
+    path += [cwd + '/class/a9g']
+    src += Glob('class/a9g/at_device_a9g.c')
+    if GetDepend(['AT_USING_SOCKET']):
+        src += Glob('class/a9g/at_socket_a9g.c')
+    if GetDepend(['AT_DEVICE_A9G_SAMPLE']):
+        src += Glob('samples/at_sample_a9g.c')
+
 # M26/MC20
 if GetDepend(['AT_DEVICE_USING_M26']):
     path += [cwd + '/class/m26']
@@ -84,6 +93,105 @@ if GetDepend(['AT_DEVICE_USING_W60X']):
         src += Glob('class/w60x/at_socket_w60x.c')
     if GetDepend(['AT_DEVICE_W60X_SAMPLE']):
         src += Glob('samples/at_sample_w60x.c')
+        
+# BC26
+if GetDepend(['AT_DEVICE_USING_BC26']):
+    path += [cwd + '/class/bc26']
+    src += Glob('class/bc26/at_device_bc26.c')
+    if GetDepend(['AT_USING_SOCKET']):
+        src += Glob('class/bc26/at_socket_bc26.c')
+    if GetDepend(['AT_DEVICE_BC26_SAMPLE']):
+        src += Glob('samples/at_sample_bc26.c')
+        
+# air720
+if GetDepend(['AT_DEVICE_USING_AIR720']):
+    path += [cwd + '/class/air720']
+    src += Glob('class/air720/at_device_air720.c')
+    if GetDepend(['AT_USING_SOCKET']):
+        src += Glob('class/air720/at_socket_air720.c')
+    if GetDepend(['AT_DEVICE_AIR720_SAMPLE']):
+        src += Glob('samples/at_sample_air720.c')
+        
+# ME3616
+if GetDepend(['AT_DEVICE_USING_ME3616']):
+    path += [cwd + '/class/me3616']
+    src += Glob('class/me3616/at_device_me3616.c')
+    if GetDepend(['AT_USING_SOCKET']):
+        src += Glob('class/me3616/at_socket_me3616.c')
+    if GetDepend(['AT_DEVICE_ME3616_SAMPLE']):
+        src += Glob('samples/at_sample_me3616.c')
+
+# M6315
+if GetDepend(['AT_DEVICE_USING_M6315']):
+    path += [cwd + '/class/m6315']
+    src += Glob('class/m6315/at_device_m6315.c')
+    if GetDepend(['AT_USING_SOCKET']):
+        src += Glob('class/m6315/at_socket_m6315.c')
+    if GetDepend(['AT_DEVICE_M6315_SAMPLE']):
+        src += Glob('samples/at_sample_m6315.c')            
+
+# BC28
+if GetDepend(['AT_DEVICE_USING_BC28']):
+    path += [cwd + '/class/bc28']
+    src += Glob('class/bc28/at_device_bc28.c')
+    if GetDepend(['AT_USING_SOCKET']):
+        src += Glob('class/bc28/at_socket_bc28.c')
+    if GetDepend(['AT_DEVICE_BC28_SAMPLE']):
+        src += Glob('samples/at_sample_bc28.c')
+
+# EC200X
+if GetDepend(['AT_DEVICE_USING_EC200X']):
+    path += [cwd + '/class/ec200x']
+    src += Glob('class/ec200x/at_device_ec200x.c')
+    if GetDepend(['AT_USING_SOCKET']):
+        src += Glob('class/ec200x/at_socket_ec200x.c')
+    if GetDepend(['AT_DEVICE_EC200X_SAMPLE']):
+        src += Glob('samples/at_sample_ec200x.c')
+
+# N21
+if GetDepend(['AT_DEVICE_USING_N21']):
+    path += [cwd + '/class/n21']
+    src += Glob('class/n21/at_device_n21.c')
+    if GetDepend(['AT_USING_SOCKET']):
+        src += Glob('class/n21/at_socket_n21.c')
+    if GetDepend(['AT_DEVICE_N21_SAMPLE']):
+        src += Glob('samples/at_sample_n21.c')
+
+# N58
+if GetDepend(['AT_DEVICE_USING_N58']):
+    path += [cwd + '/class/n58']
+    src += Glob('class/n58/at_device_n58.c')
+    if GetDepend(['AT_USING_SOCKET']):
+        src += Glob('class/n58/at_socket_n58.c')
+    if GetDepend(['AT_DEVICE_N58_SAMPLE']):
+        src += Glob('samples/at_sample_n58.c')
+
+# M5311
+if GetDepend(['AT_DEVICE_USING_M5311']):
+    path += [cwd + '/class/m5311']
+    src += Glob('class/m5311/at_device_m5311.c')
+    if GetDepend(['AT_USING_SOCKET']):
+        src +=Glob('class/m5311/at_socket_m5311.c')
+    if GetDepend(['AT_DEVICE_M5311_SAMPLE']):
+        src +=Glob('samples/at_sample_m5311.c')
+
+# N720
+if GetDepend(['AT_DEVICE_USING_N720']):
+    path += [cwd + '/class/n720']
+    src += Glob('class/N720/at_device_n720.c')
+    if GetDepend(['AT_USING_SOCKET']):
+        src += Glob('class/n720/at_socket_n720.c')
+    if GetDepend(['AT_DEVICE_N720_SAMPLE']):
+        src += Glob('samples/at_sample_n720.c')
+
+# L610
+if GetDepend(['AT_DEVICE_USING_L610']):
+    path += [cwd + '/class/l610']
+    src += Glob('class/l610/at_device_l610.c')
+    if GetDepend(['AT_USING_SOCKET']):
+        src +=Glob('class/l610/at_socket_l610.c')
+    if GetDepend(['AT_DEVICE_L610_SAMPLE']):
+        src +=Glob('samples/at_sample_l610.c')
 
 group = DefineGroup('at_device', src, depend = ['PKG_USING_AT_DEVICE'], CPPPATH = path)
 

@@ -40,8 +40,8 @@ extern "C" {
 #include <netdev.h>
 #endif /* RT_USING_NETDEV */
 
-#define AT_DEVICE_SW_VERSION           "2.0.2"
-#define AT_DEVICE_SW_VERSION_NUM       0x20002
+#define AT_DEVICE_SW_VERSION           "2.0.4"
+#define AT_DEVICE_SW_VERSION_NUM       0x20004
 
 /* AT device class ID */
 #define AT_DEVICE_CLASS_ESP8266        0x01U
@@ -53,6 +53,18 @@ extern "C" {
 #define AT_DEVICE_CLASS_MW31           0x07U
 #define AT_DEVICE_CLASS_ESP32          0x08U
 #define AT_DEVICE_CLASS_W60X           0x09U
+#define AT_DEVICE_CLASS_A9G            0x0AU
+#define AT_DEVICE_CLASS_BC26           0x0BU
+#define AT_DEVICE_CLASS_AIR720         0x0CU
+#define AT_DEVICE_CLASS_ME3616         0x0DU
+#define AT_DEVICE_CLASS_M6315          0x0EU
+#define AT_DEVICE_CLASS_BC28           0x0FU
+#define AT_DEVICE_CLASS_EC200X         0x10U
+#define AT_DEVICE_CLASS_N21            0x11U
+#define AT_DEVICE_CLASS_N58            0x12U
+#define AT_DEVICE_CLASS_M5311          0X13U
+#define AT_DEVICE_CLASS_N720           0X14U
+#define AT_DEVICE_CLASS_L610           0X15U
 
 /* Options and Commands for AT device control opreations */
 #define AT_DEVICE_CTRL_POWER_ON        0x01L
