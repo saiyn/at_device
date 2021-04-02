@@ -86,7 +86,9 @@ static int sim800c_socket_close(struct at_socket *socket)
     int result = RT_EOK;
     int device_socket = (int) socket->user_data;
     struct at_device *device = (struct at_device *) socket->device;
-    
+		rt_mutex_t lock = device->client->lock;
+	
+	  rt_mutex_take(lock, RT_WAITING_FOREVER);
     /* clear socket close event */
     event = SET_EVENT(device_socket, SIM800C_EVNET_CLOSE_OK);
     sim800c_socket_event_recv(device, event, 0, RT_EVENT_FLAG_OR);
@@ -105,6 +107,9 @@ static int sim800c_socket_close(struct at_socket *socket)
     }
 
 __exit:    
+		
+		rt_mutex_release(lock);
+	
     return result;
 }
 
@@ -131,6 +136,7 @@ static int sim800c_socket_connect(struct at_socket *socket, char *ip, int32_t po
     int result = RT_EOK, event_result = 0;
     int device_socket = (int) socket->user_data;
     struct at_device *device = (struct at_device *) socket->device;
+	  rt_mutex_t lock = device->client->lock;
 
     RT_ASSERT(ip);
     RT_ASSERT(port >= 0);
@@ -141,6 +147,8 @@ static int sim800c_socket_connect(struct at_socket *socket, char *ip, int32_t po
         LOG_E("no memory for resp create.");
         return -RT_ENOMEM;
     }
+		
+		rt_mutex_take(lock, RT_WAITING_FOREVER);
 
 __retry:
 
@@ -215,6 +223,10 @@ __retry:
     }
 
 __exit:
+		
+		rt_mutex_release(lock);
+		
+		
     if (resp)
     {
         at_delete_resp(resp);
@@ -376,6 +388,9 @@ static int sim800c_domain_resolve(const char *name, char ip[16])
         if (at_obj_exec_cmd(device->client, resp, "AT+CDNSGIP=\"%s\"", name) < 0)
         {
             result = -RT_ERROR;
+					
+						device->client->need_reboot = RT_TRUE;
+					
             goto __exit;
         }
 

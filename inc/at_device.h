@@ -79,6 +79,7 @@ extern "C" {
 #define AT_DEVICE_CTRL_GET_SIGNAL      0x0AL
 #define AT_DEVICE_CTRL_GET_GPS         0x0BL
 #define AT_DEVICE_CTRL_GET_VER         0x0CL
+#define AT_DEVICE_CTRL_WRITE_FILE      0x0DL
 
 /* Name type */
 #define AT_DEVICE_NAMETYPE_DEVICE      0x01
@@ -117,6 +118,8 @@ struct at_device
 {
     char name[RT_NAME_MAX];                      /* AT device name */
     rt_bool_t is_init;                           /* AT device initialization completed */
+    rt_bool_t is_ready;
+		rt_bool_t is_initing;
     struct at_device_class *class;               /* AT device class object */
     struct at_client *client;                    /* AT Client object for AT device */
     struct netdev *netdev;                       /* Network interface device for AT device */

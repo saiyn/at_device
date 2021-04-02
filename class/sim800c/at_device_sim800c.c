@@ -29,6 +29,8 @@
 #include <ctype.h>
 
 #include <at_device_sim800c.h>
+#include <internal.h>
+#include "webclient.h"
 
 #define LOG_TAG                        "at.dev.sim800"
 #include <at_log.h>
@@ -44,6 +46,11 @@ static char *CSTT_CHINA_MOBILE  = "AT+CSTT=\"CMNET\"";
 static char *CSTT_CHINA_UNICOM  = "AT+CSTT=\"UNINET\"";
 static char *CSTT_CHINA_TELECOM = "AT+CSTT=\"CTNET\"";
 
+
+static void sim800c_reset(struct at_device *device);
+static char _pid[32];
+char *gCurPid = _pid;
+
 static void sim800c_power_on(struct at_device *device)
 {
     struct at_device_sim800c *sim800c = RT_NULL;
@@ -58,12 +65,15 @@ static void sim800c_power_on(struct at_device *device)
 
     if (rt_pin_read(sim800c->power_status_pin) == PIN_HIGH)
     {
+				LOG_I("try power on SIM800 status pin high");
+			
         return;
     }
     rt_pin_write(sim800c->power_pin, PIN_HIGH);
 
     while (rt_pin_read(sim800c->power_status_pin) == PIN_LOW)
     {
+				LOG_I("waitting for status pin high");
         rt_thread_mdelay(10);
     }
     rt_pin_write(sim800c->power_pin, PIN_LOW);
@@ -83,6 +93,7 @@ static void sim800c_power_off(struct at_device *device)
 
     if (rt_pin_read(sim800c->power_status_pin) == PIN_LOW)
     {
+				LOG_I("try power off SIM800 status pin high");
         return;
     }
     rt_pin_write(sim800c->power_pin, PIN_HIGH);
@@ -155,6 +166,7 @@ static int sim800c_netdev_set_info(struct netdev *netdev)
 
         LOG_D("%s device IMEI number: %s", device->name, imei);
 
+				strcpy(gCurPid, imei);
         netdev->hwaddr_len = SIM800C_NETDEV_HWADDR_LEN;
         /* get hardware address by IMEI */
         for (i = 0, j = 0; i < SIM800C_NETDEV_HWADDR_LEN && j < SIM800C_IMEI_LEN; i++, j += 2)
@@ -250,6 +262,9 @@ static void check_link_status_entry(void *parameter)
     int result_code, link_status;
     struct at_device *device = RT_NULL;
     struct netdev *netdev = (struct netdev *)parameter;
+    int signal[2] = {0};
+		static int power_status = 0;
+		static int sig = 0, ret = 0;
 
     device = at_device_get_by_name(AT_DEVICE_NAMETYPE_NETDEV, netdev->name);
     if (device == RT_NULL)
@@ -267,6 +282,85 @@ static void check_link_status_entry(void *parameter)
 
     while (1)
     {
+			if(device->is_init == RT_FALSE)
+			{
+				LOG_I("device:%s is not ready", device->name);
+				rt_thread_mdelay(SIM800C_LINK_DELAY_TIME);
+				continue;
+			}
+			
+			if(device->client->need_reboot == RT_TRUE)
+			{
+				LOG_I("need reboot flag is true, try to rest sim800c");
+				
+				device->client->need_reboot = RT_FALSE;
+				
+				sim800c_reset(device);
+			
+			}
+			//check power status
+			if (rt_pin_read(GET_PIN(A,5)) == PIN_LOW)
+			{
+					if(power_status != SYS_POWER_BATTERY)
+					{
+				
+						if(send_sys_notify(NOTIFY_MSG_POWER_STAT, 1) == 0)
+						{
+							power_status = SYS_POWER_BATTERY;
+						
+							LOG_I("try send notify msg:main power off");
+							
+							mb_set_event(EVENT_POWER_OFF);
+							
+							mb_clear_event(EVENT_POWER_ON);
+						}
+					}
+					
+			}
+			else
+			{
+				if(power_status != SYS_POWER_MAIN)
+				{
+					if(send_sys_notify(NOTIFY_MSG_POWER_STAT, 1) == 0)
+					{
+						power_status = SYS_POWER_MAIN;
+					
+						LOG_I("try send notify msg:main power on");
+						
+						mb_set_event(EVENT_POWER_ON);
+						
+						mb_clear_event(EVENT_POWER_OFF);
+					}
+				}
+			}
+	if((ret = at_obj_exec_cmd(device->client, resp, "AT+CSQ")) < 0)
+	{
+		 if(ret == -RT_ETIMEOUT)
+		 {
+			  LOG_W("sim868 exec timeout, try to reset sim868");
+				sim800c_reset(device);
+		 }
+		
+      rt_thread_mdelay(SIM800C_LINK_DELAY_TIME);
+	    continue;
+	}
+
+	
+  if(at_resp_parse_line_args_by_kw(resp, "+CSQ:", "+CSQ: %d,%d", &signal[0], &signal[1]) == 2)
+	{
+		LOG_I("csq:%d,%d", signal[0], signal[1]);
+		
+		if(sig != signal[0])
+		{
+			if(send_sys_notify(NOTIFY_MSG_GPRS_QULITY, sig) == 0)
+			{
+				sig = signal[0];
+				
+				LOG_I("try send notify msg:csq=%d", sig);
+			}
+		}
+		
+	}
         /* send "AT+CGREG?" commond  to check netweork interface device link status */
         if (at_obj_exec_cmd(device->client, resp, "AT+CGREG?") < 0)
         {
@@ -290,9 +384,9 @@ static void check_link_status_entry(void *parameter)
 
 static int sim800c_netdev_check_link_status(struct netdev *netdev)
 {
-#define SIM800C_LINK_THREAD_TICK           20
+#define SIM800C_LINK_THREAD_TICK           80
 #define SIM800C_LINK_THREAD_STACK_SIZE     (1024 + 512)
-#define SIM800C_LINK_THREAD_PRIORITY       (RT_THREAD_PRIORITY_MAX - 2)
+#define SIM800C_LINK_THREAD_PRIORITY       (RT_THREAD_PRIORITY_MAX - THREAD_PRIORITY_AT_LINK_CHECK)
 
     rt_thread_t tid;
     char tname[RT_NAME_MAX] = {0};
@@ -311,9 +405,10 @@ static int sim800c_netdev_check_link_status(struct netdev *netdev)
     return RT_EOK;
 }
 
-static int sim800c_net_init(struct at_device *device);
 
-static int sim800c_netdev_set_up(struct netdev *netdev)
+static int sim800c_net_init(struct at_device *device, rt_bool_t sync_init);
+
+static int sim800c_netdev_set_up(struct netdev *netdev, rt_bool_t sync_init)
 {
     struct at_device *device = RT_NULL;
 
@@ -326,7 +421,7 @@ static int sim800c_netdev_set_up(struct netdev *netdev)
 
     if (device->is_init == RT_FALSE)
     {
-        sim800c_net_init(device);
+        sim800c_net_init(device, sync_init);
         device->is_init = RT_TRUE;
 
         netdev_low_level_set_status(netdev, RT_TRUE);
@@ -351,7 +446,8 @@ static int sim800c_netdev_set_down(struct netdev *netdev)
     {
         sim800c_power_off(device);
         device->is_init = RT_FALSE;
-
+			  device->client->status = AT_STATUS_UNINITIALIZED;
+			  device->is_ready = RT_FALSE;
         netdev_low_level_set_status(netdev, RT_FALSE);
         LOG_D("network interface device(%s) set down status.", netdev->name);
     }
@@ -383,6 +479,7 @@ static int sim800c_netdev_set_dns_server(struct netdev *netdev, uint8_t dns_num,
     {
         LOG_D("no memory for resp create.");
         result = -RT_ENOMEM;
+				exit(0);
         goto __exit;
     }
 
@@ -415,12 +512,23 @@ static int sim800c_ping_domain_resolve(struct at_device *device, const char *nam
     if (resp == RT_NULL)
     {
         LOG_E("no memory for resp create.");
+				exit(0);
         return -RT_ENOMEM;
     }
 
     if (at_obj_exec_cmd(device->client, resp, "AT+CDNSGIP=\"%s\"", name) < 0)
     {
         result = -RT_ERROR;
+			
+				if(at_obj_exec_cmd(device->client, at_resp_set_info(resp, 128, 2, 40 * RT_TICK_PER_SECOND), "AT+CIPSHUT") < 0)
+				{
+					LOG_E("RESET PDP CONTEXT FAIL, WE SHOULD RESET THE MODULE");
+				}
+				else
+				{
+					LOG_I("cipshut exec success");
+				}
+			
         goto __exit;
     }
 
@@ -496,6 +604,7 @@ static int sim800c_netdev_ping(struct netdev *netdev, const char *host,
     {
         LOG_E("no memory for resp create.");
         result = -RT_ERROR;
+				exit(0);
         goto __exit;
     }
 
@@ -609,17 +718,28 @@ static struct netdev *sim800c_netdev_add(const char *netdev_name)
         }                                                                                          \
     } while(0)                                                                                     \
 
+#define AT_SEND_CMD_NO_EXIT(client, resp, resp_line, timeout, cmd)                                         \
+    do {                                                                                           \
+        (resp) = at_resp_set_info((resp), 128, (resp_line), rt_tick_from_millisecond(timeout));    \
+        if (at_obj_exec_cmd((client), (resp), (cmd)) < 0)                                          \
+        {                                                                                          \
+            result = -RT_ERROR;                                                                    \
+        }                                                                                          \
+    } while(0)                                                                                     \
 /* init for sim800c */
 static void sim800c_init_thread_entry(void *parameter)
 {
 #define INIT_RETRY                     5
 #define CPIN_RETRY                     10
 #define CSQ_RETRY                      10
-#define CREG_RETRY                     10
+
+#define CREG_RETRY                     20
+
 #define CGREG_RETRY                    20
 
-    int i, qimux, retry_num = INIT_RETRY;
-    char parsed_data[32] = {0};
+    int i, qimux;
+    unsigned int retry = 1;
+    char parsed_data[10] = {0};
     rt_err_t result = RT_EOK;
     at_response_t resp = RT_NULL;
     struct at_device *device = (struct at_device *)parameter;
@@ -633,9 +753,12 @@ static void sim800c_init_thread_entry(void *parameter)
     }
 
     LOG_D("start init %s device", device->name);
+		
+		device->is_initing = RT_TRUE;
 
-    while (retry_num--)
+    while (1)
     {
+
         rt_memset(parsed_data, 0, sizeof(parsed_data));
         rt_thread_mdelay(500);
         sim800c_power_on(device);
@@ -644,9 +767,15 @@ static void sim800c_init_thread_entry(void *parameter)
         /* wait sim800c startup finish */
         if (at_client_obj_wait_connect(client, SIM800C_WAIT_CONNECT_TIME))
         {
+
+						LOG_E("connect to at client fail");
             result = -RT_ETIMEOUT;
             goto __exit;
         }
+				
+				LOG_I("at client connected");
+				
+				client->status = AT_STATUS_INITIALIZED;
 
         /* disable echo */
         AT_SEND_CMD(client, resp, 0, 300, "ATE0");
@@ -660,7 +789,7 @@ static void sim800c_init_thread_entry(void *parameter)
         /* check SIM card */
         for (i = 0; i < CPIN_RETRY; i++)
         {
-            AT_SEND_CMD(client, resp, 2, 5 * RT_TICK_PER_SECOND, "AT+CPIN?");
+            AT_SEND_CMD_NO_EXIT(client, resp, 2, 5 * RT_TICK_PER_SECOND, "AT+CPIN?");
 
             if (at_resp_get_line_by_kw(resp, "READY"))
             {
@@ -681,7 +810,7 @@ static void sim800c_init_thread_entry(void *parameter)
         /* check the GSM network is registered */
         for (i = 0; i < CREG_RETRY; i++)
         {
-            AT_SEND_CMD(client, resp, 0, 300, "AT+CREG?");
+            AT_SEND_CMD(client, resp, 0, 500, "AT+CREG?");
             at_resp_parse_line_args_by_kw(resp, "+CREG:", "+CREG: %s", &parsed_data);
             if (!strncmp(parsed_data, "0,1", sizeof(parsed_data)) ||
                 !strncmp(parsed_data, "0,5", sizeof(parsed_data)))
@@ -700,7 +829,7 @@ static void sim800c_init_thread_entry(void *parameter)
         /* check the GPRS network is registered */
         for (i = 0; i < CGREG_RETRY; i++)
         {
-            AT_SEND_CMD(client, resp, 0, 300, "AT+CGREG?");
+            AT_SEND_CMD(client, resp, 0, 500, "AT+CGREG?");
             at_resp_parse_line_args_by_kw(resp, "+CGREG:", "+CGREG: %s", &parsed_data);
             if (!strncmp(parsed_data, "0,1", sizeof(parsed_data)) ||
                 !strncmp(parsed_data, "0,5", sizeof(parsed_data)))
@@ -787,10 +916,15 @@ static void sim800c_init_thread_entry(void *parameter)
         if (result != RT_EOK)
         {
             /* power off the sim800c device */
-            sim800c_power_off(device);
-            rt_thread_mdelay(1000);
 
-            LOG_I("%s device initialize retry...", device->name);
+						LOG_I("%s device initialize will retry after %d seconds", device->name, retry);
+            rt_thread_mdelay(1000*retry);
+						sim800c_power_off(device);
+            
+						if(retry < 1800)
+						{
+							retry *= 2;
+						}
         }
     }
 
@@ -809,6 +943,9 @@ static void sim800c_init_thread_entry(void *parameter)
             sim800c_netdev_check_link_status(device->netdev);
         }
 
+				retry = 0;
+
+				device->is_initing = RT_FALSE;
         LOG_I("%s device network initialize success!", device->name);
 
     }
@@ -818,9 +955,10 @@ static void sim800c_init_thread_entry(void *parameter)
     }
 }
 
-static int sim800c_net_init(struct at_device *device)
+static int sim800c_net_init(struct at_device *device, rt_bool_t sync_init)
 {
-#ifdef AT_DEVICE_SIM800C_INIT_ASYN
+if(sync_init == RT_FALSE)
+{
     rt_thread_t tid;
 
     tid = rt_thread_create("sim800c_net", sim800c_init_thread_entry, (void *)device,
@@ -834,9 +972,12 @@ static int sim800c_net_init(struct at_device *device)
         LOG_E("create %s device init thread failed.", device->name);
         return -RT_ERROR;
     }
-#else
+}
+else
+{
     sim800c_init_thread_entry(device);
-#endif /* AT_DEVICE_SIM800C_INIT_ASYN */
+}
+
 
     return RT_EOK;
 }
@@ -848,10 +989,21 @@ static void urc_func(struct at_client *client, const char *data, rt_size_t size)
     LOG_I("URC data : %.*s", size, data);
 }
 
+static void timeout_func(struct at_client *client, const char *data, rt_size_t size)
+{
+	LOG_I("sim800 module crash, try to reboot sim800c");
+	
+
+	client->need_reboot = RT_TRUE;
+}
+
+
+
 /* sim800c device URC table for the device control */
 static const struct at_urc urc_table[] =
 {
         {"RDY",         "\r\n",                 urc_func},
+				{"TimeOut",			"\r\n",									timeout_func},
 };
 
 static int sim800c_init(struct at_device *device)
@@ -891,12 +1043,23 @@ static int sim800c_init(struct at_device *device)
     }
 
     /* initialize sim800c device network */
-    return sim800c_netdev_set_up(device->netdev);
+    return sim800c_netdev_set_up(device->netdev, RT_FALSE);
+
 }
 
 static int sim800c_deinit(struct at_device *device)
 {
     return sim800c_netdev_set_down(device->netdev);
+static void sim800c_reset(struct at_device *device)
+{
+	if(device->is_initing == RT_TRUE)
+	{
+		LOG_E("at device is initing...............");
+		return;
+	}
+	
+	sim800c_deinit(device);
+	sim800c_netdev_set_up(device->netdev, RT_TRUE);
 }
 
 static int sim800c_control(struct at_device *device, int cmd, void *arg)
@@ -909,7 +1072,6 @@ static int sim800c_control(struct at_device *device, int cmd, void *arg)
     {
     case AT_DEVICE_CTRL_POWER_ON:
     case AT_DEVICE_CTRL_POWER_OFF:
-    case AT_DEVICE_CTRL_RESET:
     case AT_DEVICE_CTRL_LOW_POWER:
     case AT_DEVICE_CTRL_SLEEP:
     case AT_DEVICE_CTRL_WAKEUP:
@@ -921,6 +1083,11 @@ static int sim800c_control(struct at_device *device, int cmd, void *arg)
     case AT_DEVICE_CTRL_GET_VER:
         LOG_W("not support the control command(%d).", cmd);
         break;
+
+    case AT_DEVICE_CTRL_RESET:
+	sim800c_reset(device);
+	break;
+
     default:
         LOG_E("input error control command(%d).", cmd);
         break;
